@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  type: NodePort
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    nodePort: 30000
+--- 
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+spec:
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      volumes:
+        - name: init-db-config-map
+          configMap:
+            name: db-init
+      containers:
+        - name: postgres
+          image: postgres:9
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: password
+          resources:
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: init-db-config-map
+              mountPath: /docker-entrypoint-initdb.d
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-init
+data:
+  init.sql: |
+    CREATE TABLE USUARIO (
+      USUARIO text primary key,
+      CORREO text not null,
+      ADD_FECHA date not null default CURRENT_TIMESTAMP
+    );
+    CREATE TABLE CUENTA_TIPO (
+      CUENTA_TIPO SERIAL primary key,
+      DESCRIPCION text not null unique,
+      ADD_FECHA date not null default CURRENT_TIMESTAMP
+    );
+    CREATE TABLE MONEDA (
+      MONEDA SERIAL primary key, 
+      DESCRIPCION text not null unique,
+      ADD_FECHA date not null default CURRENT_TIMESTAMP
+    );
+    CREATE TABLE CUENTA (
+      CUENTA SERIAL primary key,
+      DESCRIPCION text not null,
+      CUENTA_TIPO integer not null references CUENTA_TIPO(CUENTA_TIPO),
+      MONEDA integer not null references MONEDA(MONEDA),
+      USUARIO text not null references USUARIO(USUARIO),
+      ADD_FECHA date not null default CURRENT_TIMESTAMP
+    );
+    INSERT INTO MONEDA(DESCRIPCION) 
+    VALUES ('GTQ');
+    INSERT INTO MONEDA(DESCRIPCION) 
+    VALUES ('USD');
+    INSERT INTO CUENTA_TIPO(DESCRIPCION) 
+    VALUES ('Efectivo');
+    INSERT INTO CUENTA_TIPO(DESCRIPCION) 
+    VALUES ('Corriente');
+    INSERT INTO CUENTA_TIPO(DESCRIPCION) 
+    VALUES ('Ahorro');
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-secret
+data:
+  password: {your-pass}
+type: Opaque
